@@ -29,6 +29,7 @@ const (
 
 type Event interface {
 	Phase() Phase
+	Core() *EventCore
 }
 
 type StackFrame struct {
@@ -48,6 +49,10 @@ type EventCore struct {
 	ThreadTimestamp *int64
 	ProcessID       *int64
 	ThreadID        *int64
+}
+
+func (ec *EventCore) Core() *EventCore {
+	return ec
 }
 
 type EventWithArgs struct {
@@ -94,7 +99,7 @@ type Instant struct {
 func (Instant) Phase() Phase { return PhaseInstant }
 
 type Counter struct {
-	EventWithArgs
+	EventCore
 	Values map[string]int64
 }
 
@@ -174,14 +179,14 @@ const (
 
 type MetadataProcessName struct {
 	EventCore
-	Name string
+	ProcessName string
 }
 
 func (MetadataProcessName) Phase() Phase { return PhaseMetadata }
 
 type MetadataThreadName struct {
 	EventCore
-	Name string
+	ThreadName string
 }
 
 func (MetadataThreadName) Phase() Phase { return PhaseMetadata }
@@ -234,7 +239,7 @@ func (Mark) Phase() Phase { return PhaseMark }
 type ClockSync struct {
 	EventWithArgs
 	SyncId  string
-	IssueTs int64
+	IssueTs *int64
 }
 
 func (ClockSync) Phase() Phase { return PhaseClockSync }

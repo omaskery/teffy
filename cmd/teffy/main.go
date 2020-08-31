@@ -11,6 +11,12 @@ func main() {
 	if err != nil {
 		abortWithErr("failed to open trace file", err)
 	}
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			abortWithErr("failed to close trace file", err)
+		}
+	}()
 
 	data, err := io.ParseJsonObj(f)
 	if err != nil {

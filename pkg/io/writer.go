@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/omaskery/teffy/pkg/events"
 	"io"
-	"strconv"
 	"strings"
 )
 
@@ -29,24 +28,12 @@ func WriteJsonObject(w io.Writer, data TefData) error {
 	}
 
 	for _, event := range data.Events() {
-		e := &jsonEvent{
-			Name:            event.Core().Name,
-			Phase:           string(event.Phase()),
-			Categories:      strings.Join(event.Core().Categories, ","),
-			Timestamp:       event.Core().Timestamp,
-			ThreadTimestamp: event.Core().ThreadTimestamp,
-			ProcessID:       event.Core().ProcessID,
-			ThreadID:        event.Core().ThreadID,
-			Args:            nil,
-			Extra:           nil,
-		}
-
-		err := writeJsonEvent(event, e)
+		jsonEvent, err := writeJsonEvent(event)
 		if err != nil {
-			return fmt.Errorf("failed while augmenting json event: %w", err)
+			return fmt.Errorf("failed while preparing json event: %w", err)
 		}
 
-		msg, err := json.Marshal(e)
+		msg, err := json.Marshal(jsonEvent)
 		if err != nil {
 			return fmt.Errorf("failed to serialise json event: %w", err)
 		}
@@ -63,128 +50,289 @@ func WriteJsonObject(w io.Writer, data TefData) error {
 	return nil
 }
 
-func writeJsonEvent(event events.Event, out *jsonEvent) error {
+func writeJsonEvent(event events.Event) (interface{}, error) {
 	switch e := event.(type) {
 	case *events.BeginDuration:
-		copyArgs(e.Args, out)
-		writeStack(e.StackTrace, out, "stack")
+		return jsonDurationEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args:          e.Args,
+			},
+			jsonStackInfo: writeStackInfo(e.StackTrace),
+		}, nil
 	case *events.EndDuration:
-		copyArgs(e.Args, out)
-		writeStack(e.StackTrace, out, "stack")
+		return jsonDurationEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args:          e.Args,
+			},
+			jsonStackInfo: writeStackInfo(e.StackTrace),
+		}, nil
 
 	case *events.Complete:
-		copyArgs(e.Args, out)
-		writeStack(e.StackTrace, out, "stack")
-		writeStack(e.EndStackTrace, out, "estack")
+		return jsonCompleteEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args:          e.Args,
+			},
+			jsonStackInfo: writeStackInfo(e.StackTrace),
+			EndStack:      writeStackInfo(e.EndStackTrace).Stack,
+		}, nil
 
 	case *events.Instant:
-		copyArgs(e.Args, out)
-		out.Extra = setEntry(out.Extra, "s", string(e.Scope))
-		writeStack(e.StackTrace, out, "stack")
+		return jsonInstantEvent{
+			jsonEventCore: writeJsonEventCore(event),
+			jsonStackInfo: writeStackInfo(e.StackTrace),
+			Scope:         string(e.Scope),
+		}, nil
 
 	case *events.Counter:
-		if len(e.Values) > 0 {
-			out.Args = ensureDict(out.Args)
-			for key, value := range e.Values {
-				out.Args[key] = strconv.FormatInt(value, 10)
-			}
-		}
+		return jsonCounterEvent{
+			jsonEventCore: writeJsonEventCore(event),
+			Values:        e.Values,
+		}, nil
 
 	case *events.AsyncBegin:
-		copyArgs(e.Args, out)
+		return jsonAsyncEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args:          e.Args,
+			},
+			jsonScopedId: jsonScopedId{
+				jsonId: jsonId{
+					Id: e.Id,
+				},
+				Scope: e.Scope,
+			},
+		}, nil
 	case *events.AsyncInstant:
-		copyArgs(e.Args, out)
+		return jsonAsyncEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args:          e.Args,
+			},
+			jsonScopedId: jsonScopedId{
+				jsonId: jsonId{
+					Id: e.Id,
+				},
+				Scope: e.Scope,
+			},
+		}, nil
 	case *events.AsyncEnd:
-		copyArgs(e.Args, out)
+		return jsonAsyncEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args:          e.Args,
+			},
+			jsonScopedId: jsonScopedId{
+				jsonId: jsonId{
+					Id: e.Id,
+				},
+				Scope: e.Scope,
+			},
+		}, nil
 
-	case *events.FlowStart:
-		copyArgs(e.Args, out)
-	case *events.FlowInstant:
-		copyArgs(e.Args, out)
-	case *events.FlowFinish:
-		copyArgs(e.Args, out)
-		if e.BindingPoint != events.BindingPointNext {
-			out.Extra = setEntry(out.Extra, "bp", "e")
-		}
 	case *events.ObjectCreated:
+		return jsonObjectEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+			},
+			jsonScopedId: jsonScopedId{
+				jsonId: jsonId{
+					Id: e.Id,
+				},
+			},
+		}, nil
 	case *events.ObjectSnapshot:
-		copyArgs(e.Args, out)
+		return jsonObjectEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args:          e.Args,
+			},
+			jsonScopedId: jsonScopedId{
+				jsonId: jsonId{
+					Id: e.Id,
+				},
+			},
+		}, nil
 	case *events.ObjectDeleted:
+		return jsonObjectEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+			},
+			jsonScopedId: jsonScopedId{
+				jsonId: jsonId{
+					Id: e.Id,
+				},
+			},
+		}, nil
 
 	case *events.MetadataProcessName:
-		out.Args = setEntry(out.Args, "name", e.ProcessName)
+		return jsonMetadataEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args: map[string]interface{}{
+					string(events.MetadataKindProcessName): e.ProcessName,
+				},
+			},
+		}, nil
 	case *events.MetadataProcessLabels:
-		out.Args = setEntry(out.Args, "labels", e.Labels)
+		return jsonMetadataEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args: map[string]interface{}{
+					string(events.MetadataKindProcessLabels): e.Labels,
+				},
+			},
+		}, nil
 	case *events.MetadataProcessSortIndex:
-		out.Args = setEntry(out.Args, "sort_index", strconv.FormatInt(e.SortIndex, 10))
+		return jsonMetadataEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args: map[string]interface{}{
+					string(events.MetadataKindProcessSortIndex): e.SortIndex,
+				},
+			},
+		}, nil
 	case *events.MetadataThreadName:
-		out.Args = setEntry(out.Args, "name", e.ThreadName)
+		return jsonMetadataEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args: map[string]interface{}{
+					string(events.MetadataKindProcessName): e.ThreadName,
+				},
+			},
+		}, nil
 	case *events.MetadataThreadSortIndex:
-		out.Args = setEntry(out.Args, "sort_index", strconv.FormatInt(e.SortIndex, 10))
+		return jsonMetadataEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args: map[string]interface{}{
+					string(events.MetadataKindThreadSortIndex): e.SortIndex,
+				},
+			},
+		}, nil
 	case *events.MetadataMisc:
-		copyArgs(e.Args, out)
+		return jsonMetadataEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args:          e.Args,
+			},
+		}, nil
 
 	case *events.GlobalMemoryDump:
-		copyArgs(e.Args, out)
+		return jsonMemoryDumpEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args:          e.Args,
+			},
+		}, nil
 	case *events.ProcessMemoryDump:
-		copyArgs(e.Args, out)
+		return jsonMemoryDumpEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args:          e.Args,
+			},
+		}, nil
 
 	case *events.Mark:
-		copyArgs(e.Args, out)
+		return jsonMarkEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args:          e.Args,
+			},
+		}, nil
 
 	case *events.ClockSync:
-		copyArgs(e.Args, out)
-		if e.SyncId != "" {
-			out.Args = setEntry(out.Args, "sync_id", e.SyncId)
-		}
-		if e.IssueTs != nil {
-			out.Args = setEntry(out.Args, "issue_ts", *e.IssueTs)
-		}
+		return jsonClockSyncEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args: mergeDicts(e.Args, map[string]interface{}{
+					"sync_id":  e.SyncId,
+					"issue_ts": e.IssueTs,
+				}),
+			},
+		}, nil
 
 	case *events.ContextEnter:
-		copyArgs(e.Args, out)
+		return jsonContextEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args:          e.Args,
+			},
+			jsonId: jsonId{
+				Id: e.Id,
+			},
+		}, nil
 	case *events.ContextExit:
-		copyArgs(e.Args, out)
+		return jsonContextEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args:          e.Args,
+			},
+			jsonId: jsonId{
+				Id: e.Id,
+			},
+		}, nil
 
 	case *events.LinkIds:
-		copyArgs(e.Args, out)
-		e.Args = setEntry(e.Args, "linked_id", e.LinkedId)
+		return jsonLinkedIdEvent{
+			jsonEventWithArgs: jsonEventWithArgs{
+				jsonEventCore: writeJsonEventCore(event),
+				Args: mergeDicts(e.Args, map[string]interface{}{
+					"linked_id": e.LinkedId,
+				}),
+			},
+			jsonId: jsonId{
+				Id: e.Id,
+			},
+		}, nil
 	}
-	return nil
+
+	return nil, fmt.Errorf("unknown phase encountered: '%v'", event.Phase())
 }
 
-func writeStack(trace *events.StackTrace, out *jsonEvent, key string) {
-	entries := make([]string, 0, len(trace.Trace))
-	for _, frame := range trace.Trace {
-		entries = append(entries, frame.Name)
+func mergeDicts(a, b map[string]interface{}) map[string]interface{} {
+	r := map[string]interface{}{}
+	for k, v := range a {
+		if v != nil {
+			r[k] = v
+		}
 	}
-	out.Extra = setEntry(out.Extra, key, entries)
+	for k, v := range b {
+		if v != nil {
+			r[k] = v
+		}
+	}
+	return r
 }
 
-func copyArgs(args map[string]interface{}, out *jsonEvent) {
-	if args == nil {
-		return
-	}
-	if len(args) < 1 {
-		return
+func writeStackInfo(trace *events.StackTrace) jsonStackInfo {
+	var stack []string
+
+	if trace != nil {
+		stack = make([]string, 0, len(trace.Trace))
+		for _, frame := range trace.Trace {
+			stack = append(stack, frame.Name)
+		}
 	}
 
-	out.Args = ensureDict(out.Args)
-
-	for k, v := range args {
-		out.Args[k] = v
+	return jsonStackInfo{
+		Stack: stack,
 	}
 }
 
-func setEntry(current map[string]interface{}, k string, v interface{}) map[string]interface{} {
-	current = ensureDict(current)
-	current[k] = v
-	return current
-}
-
-func ensureDict(current map[string]interface{}) map[string]interface{} {
-	if current != nil {
-		return current
+func writeJsonEventCore(e events.Event) jsonEventCore {
+	core := e.Core()
+	return jsonEventCore{
+		jsonEventPhase: jsonEventPhase{
+			Phase: string(e.Phase()),
+		},
+		Name:            core.Name,
+		Categories:      strings.Join(core.Categories, ","),
+		Timestamp:       core.Timestamp,
+		ThreadTimestamp: core.ThreadTimestamp,
+		ProcessID:       core.ProcessID,
+		ThreadID:        core.ThreadID,
 	}
-	return map[string]interface{}{}
 }

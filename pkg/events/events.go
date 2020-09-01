@@ -91,7 +91,7 @@ const (
 )
 
 type Instant struct {
-	EventWithArgs
+	EventCore
 	Scope      InstantScope
 	StackTrace *StackTrace
 }
@@ -100,25 +100,31 @@ func (Instant) Phase() Phase { return PhaseInstant }
 
 type Counter struct {
 	EventCore
-	Values map[string]int64
+	Values map[string]float64
 }
 
 func (Counter) Phase() Phase { return PhaseCounter }
 
 type AsyncBegin struct {
 	EventWithArgs
+	Id    string
+	Scope string
 }
 
 func (AsyncBegin) Phase() Phase { return PhaseAsyncBegin }
 
 type AsyncEnd struct {
 	EventWithArgs
+	Id    string
+	Scope string
 }
 
 func (AsyncEnd) Phase() Phase { return PhaseAsyncEnd }
 
 type AsyncInstant struct {
 	EventWithArgs
+	Id    string
+	Scope string
 }
 
 func (AsyncInstant) Phase() Phase { return PhaseAsyncInstant }
@@ -139,7 +145,7 @@ type BindingPoint int
 
 const (
 	BindingPointEnclosing BindingPoint = iota
-	BindingPointNext      BindingPoint = iota
+	BindingPointNext
 )
 
 type FlowFinish struct {
@@ -151,18 +157,21 @@ func (FlowFinish) Phase() Phase { return PhaseFlowFinish }
 
 type ObjectCreated struct {
 	EventCore
+	Id string
 }
 
 func (ObjectCreated) Phase() Phase { return PhaseObjectCreated }
 
 type ObjectSnapshot struct {
 	EventWithArgs
+	Id string
 }
 
 func (ObjectSnapshot) Phase() Phase { return PhaseObjectSnapshot }
 
 type ObjectDeleted struct {
 	EventCore
+	Id string
 }
 
 func (ObjectDeleted) Phase() Phase { return PhaseObjectDeleted }
@@ -246,18 +255,21 @@ func (ClockSync) Phase() Phase { return PhaseClockSync }
 
 type ContextEnter struct {
 	EventWithArgs
+	Id string
 }
 
 func (ContextEnter) Phase() Phase { return PhaseContextEnter }
 
 type ContextExit struct {
 	EventWithArgs
+	Id string
 }
 
 func (ContextExit) Phase() Phase { return PhaseContextExit }
 
 type LinkIds struct {
 	EventWithArgs
+	Id       string
 	LinkedId string
 }
 

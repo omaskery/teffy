@@ -6,15 +6,11 @@ import (
 	"fmt"
 	"github.com/omaskery/teffy/pkg/events"
 	"io"
-	"strconv"
 	"strings"
 )
 
 var (
 	ErrInvalidDisplayTimeUnit = errors.New("invalid display time unit")
-	ErrRawStackNotStrArray    = errors.New("raw stack trace is expected to be a string array")
-	ErrInvalidStackId         = errors.New("stack frame ids must be a string or integer")
-	ErrStackIdNotFound        = errors.New("stack frame id not found in known stack frames")
 	ErrInvalidDataType        = errors.New("data found in file does not match expected type")
 	ErrSyntaxError            = errors.New("file format contained a syntax error")
 )
@@ -37,8 +33,6 @@ func ParseJsonArray(r io.Reader) (*TefData, error) {
 		controllerTraceDataKey: "traceEvents",
 	}
 
-	postprocessing := make([]postProcessStep, 0)
-
 	for decoder.More() {
 		var e json.RawMessage
 		err = decoder.Decode(&e)
@@ -49,21 +43,12 @@ func ParseJsonArray(r io.Reader) (*TefData, error) {
 			return nil, fmt.Errorf("error parsing JSON: %w", err)
 		}
 
-		event, err := parseJsonEvent(e, func(step postProcessStep) {
-			postprocessing = append(postprocessing, step)
-		})
+		event, err := parseJsonEvent(e)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing event: %w", err)
 		}
 
 		result.traceEvents = append(result.traceEvents, event)
-	}
-
-	for _, step := range postprocessing {
-		err = step.Process(result)
-		if err != nil {
-			return nil, fmt.Errorf("error performing postprocessing step: %w", err)
-		}
 	}
 
 	return result, nil
@@ -110,337 +95,446 @@ func ParseJsonObj(r io.Reader) (*TefData, error) {
 		result.stackFrames[id] = frame
 	}
 
-	postprocessing := make([]postProcessStep, 0)
-
 	for _, e := range jsonFile.TraceEvents {
-		event, err := parseJsonEvent(e, func(step postProcessStep) {
-			postprocessing = append(postprocessing, step)
-		})
+		event, err := parseJsonEvent(e)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing event: %w", err)
 		}
 		result.traceEvents = append(result.traceEvents, event)
 	}
 
-	for _, step := range postprocessing {
-		err = step.Process(result)
-		if err != nil {
-			return nil, fmt.Errorf("error performing postprocessing step: %w", err)
-		}
-	}
-
 	return result, nil
 }
 
-func parseJsonEvent(rawEvent json.RawMessage, postProcess func(step postProcessStep)) (events.Event, error) {
-
-	var e jsonEvent
-	err := json.Unmarshal(rawEvent, &e)
+func parseJsonEvent(rawEvent json.RawMessage) (events.Event, error) {
+	phase, err := decodeEventPhase(rawEvent)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing event JSON: %w", err)
-	}
-
-	err = json.Unmarshal(rawEvent, &e.Extra)
-	if err != nil {
-		return nil, fmt.Errorf("error while parsing extra event JSON: %w", err)
-	}
-
-	categories := make([]string, 0)
-	if e.Categories != "" {
-		categories = strings.Split(e.Categories, ",")
-	}
-	base := events.EventCore{
-		Name:            e.Name,
-		Categories:      categories,
-		Timestamp:       e.Timestamp,
-		ThreadTimestamp: e.ThreadTimestamp,
-		ProcessID:       e.ProcessID,
-		ThreadID:        e.ThreadID,
+		return nil, fmt.Errorf("error decoding json event: %w", err)
 	}
 
 	var event events.Event
-	switch events.Phase(e.Phase) {
+	switch phase {
 	case events.PhaseBeginDuration:
-		bd := &events.BeginDuration{
-			EventWithArgs: withArgs(base, e),
-			StackTrace:    nil,
+		var j jsonDurationEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode begin duration event: %w", err)
 		}
-		bd.StackTrace, err = parseRawStackTrace(e, "stack")
-		if err != nil {
-			return nil, fmt.Errorf("error while parsing raw stack trace: %w", err)
+		event = &events.BeginDuration{
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
+			StackTrace: decodeRawStackTrace(j.Stack),
 		}
-		if stackRef, ok := e.Extra["sf"]; ok {
-			target := &events.StackTrace{}
-			postProcess(&buildStackTrace{
-				reference: stackRef,
-				target:    target,
-			})
-			bd.StackTrace = target
+	case events.PhaseEndDuration:
+		var j jsonDurationEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode end duration event: %w", err)
 		}
-		event = bd
+		event = &events.EndDuration{
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
+			StackTrace: decodeRawStackTrace(j.Stack),
+		}
 
 	case events.PhaseComplete:
-		c := &events.Complete{
-			EventWithArgs: withArgs(base, e),
-			StackTrace:    nil,
-			EndStackTrace: nil,
+		var j jsonCompleteEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode complete event: %w", err)
 		}
-		c.StackTrace, err = parseRawStackTrace(e, "stack")
-		if err != nil {
-			return nil, fmt.Errorf("error while parsing raw stack trace: %w", err)
-		}
-		if stackRef, ok := e.Extra["sf"]; ok {
-			target := &events.StackTrace{}
-			postProcess(&buildStackTrace{
-				reference: stackRef,
-				target:    target,
-			})
-			c.StackTrace = target
-		}
-		c.EndStackTrace, err = parseRawStackTrace(e, "estack")
-		if err != nil {
-			return nil, fmt.Errorf("error while parsing raw stack trace: %w", err)
-		}
-		if stackRef, ok := e.Extra["esf"]; ok {
-			target := &events.StackTrace{}
-			postProcess(&buildStackTrace{
-				reference: stackRef,
-				target:    target,
-			})
-			c.EndStackTrace = target
+		event = &events.Complete{
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
+			StackTrace:    decodeRawStackTrace(j.Stack),
+			EndStackTrace: decodeRawStackTrace(j.EndStack),
 		}
 
 	case events.PhaseInstant:
-		scope := events.InstantScopeThread
-		if scopeVal, ok := e.Extra["s"]; ok {
-			s, err := expectStr(scopeVal)
-			if err != nil {
-				return nil, fmt.Errorf("error parsing instant event scope: %w", err)
-			}
-			scope = events.InstantScope(s)
+		var j jsonInstantEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode instant event: %w", err)
 		}
-		i := &events.Instant{
-			EventWithArgs: withArgs(base, e),
-			Scope:         scope,
-			StackTrace:    nil,
+		scope := events.InstantScope(j.Scope)
+		if scope == "" {
+			scope = events.InstantScopeGlobal
 		}
-		i.StackTrace, err = parseRawStackTrace(e, "stack")
-		if err != nil {
-			return nil, fmt.Errorf("error while parsing raw stack trace: %w", err)
+		event = &events.Instant{
+			EventCore:  decodeEventCore(j.jsonEventCore),
+			Scope:      scope,
+			StackTrace: decodeRawStackTrace(j.Stack),
 		}
-		if stackRef, ok := e.Extra["sf"]; ok {
-			target := &events.StackTrace{}
-			postProcess(&buildStackTrace{
-				reference: stackRef,
-				target:    target,
-			})
-			i.StackTrace = target
+
+	case events.PhaseCounter:
+		var j jsonCounterEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode counter event: %w", err)
+		}
+		event = &events.Counter{
+			EventCore: decodeEventCore(j.jsonEventCore),
+			Values:    j.Values,
 		}
 
 	case "S": // deprecated async start
+		var j jsonAsyncEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode (deprecated) async start event: %w", err)
+		}
 		event = &events.AsyncBegin{
-			EventWithArgs: withArgs(base, e),
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
 		}
-
 	case "T": // deprecated async step into
-		event = &events.AsyncInstant{
-			EventWithArgs: withArgs(base, e),
+		var j jsonAsyncEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode (deprecated) async step into event: %w", err)
 		}
-
+		event = &events.AsyncInstant{
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
+		}
 	case "p": // deprecated async step past
-		event = &events.AsyncInstant{
-			EventWithArgs: withArgs(base, e),
+		var j jsonAsyncEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode (deprecated) async step past event: %w", err)
 		}
-
+		event = &events.AsyncInstant{
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
+		}
 	case "F": // deprecated async finish
+		var j jsonAsyncEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode (deprecated) async finish event: %w", err)
+		}
 		event = &events.AsyncEnd{
-			EventWithArgs: withArgs(base, e),
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
 		}
 
 	case events.PhaseAsyncBegin:
+		var j jsonAsyncEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode async begin event: %w", err)
+		}
 		event = &events.AsyncBegin{
-			EventWithArgs: withArgs(base, e),
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
 		}
-
 	case events.PhaseAsyncInstant:
-		event = &events.AsyncInstant{
-			EventWithArgs: withArgs(base, e),
+		var j jsonAsyncEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode async instant event: %w", err)
 		}
-
+		event = &events.AsyncInstant{
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
+		}
 	case events.PhaseAsyncEnd:
+		var j jsonAsyncEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode async end event: %w", err)
+		}
 		event = &events.AsyncEnd{
-			EventWithArgs: withArgs(base, e),
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
 		}
 
 	case events.PhaseObjectCreated:
+		var j jsonObjectEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode object created event: %w", err)
+		}
 		event = &events.ObjectCreated{
-			EventCore: base,
+			EventCore: decodeEventCore(j.jsonEventCore),
 		}
-
 	case events.PhaseObjectSnapshot:
-		event = &events.ObjectSnapshot{
-			EventWithArgs: withArgs(base, e),
+		var j jsonObjectEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode object snapshot event: %w", err)
 		}
-
+		event = &events.ObjectSnapshot{
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
+		}
 	case events.PhaseObjectDeleted:
+		var j jsonObjectEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode object deleted event: %w", err)
+		}
 		event = &events.ObjectDeleted{
-			EventCore: base,
+			EventCore: decodeEventCore(j.jsonEventCore),
 		}
 
 	case events.PhaseMetadata:
-		switch events.MetadataKind(e.Name) {
+		var j jsonMetadataEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode metadata event: %w", err)
+		}
+		switch events.MetadataKind(j.Name) {
 		case events.MetadataKindProcessName:
-			name, err := expectStr(e.Args["name"])
+			name, err := requireStrEntry(j.Args, "name")
 			if err != nil {
 				return nil, fmt.Errorf("failed to get process name metadata: %w", err)
 			}
 			event = &events.MetadataProcessName{
-				EventCore:   base,
+				EventCore:   decodeEventCore(j.jsonEventCore),
 				ProcessName: name,
 			}
 		case events.MetadataKindProcessLabels:
-			labels, err := expectStr(e.Args["labels"])
+			labels, err := requireStrEntry(j.Args, "labels")
 			if err != nil {
 				return nil, fmt.Errorf("failed to get process labels metadata: %w", err)
 			}
 			event = &events.MetadataProcessLabels{
-				EventCore: base,
+				EventCore: decodeEventCore(j.jsonEventCore),
 				Labels:    labels,
 			}
 		case events.MetadataKindProcessSortIndex:
-			sortIndex, err := expectInt(e.Args["sort_index"])
+			sortIndex, err := requireIntEntry(j.Args, "sort_index")
 			if err != nil {
 				return nil, fmt.Errorf("failed to get process sort index metadata: %w", err)
 			}
 			event = &events.MetadataProcessSortIndex{
-				EventCore: base,
+				EventCore: decodeEventCore(j.jsonEventCore),
 				SortIndex: sortIndex,
 			}
 		case events.MetadataKindThreadName:
-			name, err := expectStr(e.Args["name"])
+			name, err := requireStrEntry(j.Args, "name")
 			if err != nil {
 				return nil, fmt.Errorf("failed to get thread name metadata: %w", err)
 			}
 			event = &events.MetadataThreadName{
-				EventCore:  base,
+				EventCore:  decodeEventCore(j.jsonEventCore),
 				ThreadName: name,
 			}
 		case events.MetadataKindThreadSortIndex:
-			sortIndex, err := expectInt(e.Args["sort_index"])
+			sortIndex, err := requireIntEntry(j.Args, "sort_index")
 			if err != nil {
 				return nil, fmt.Errorf("failed to get thread sort index metadata: %w", err)
 			}
 			event = &events.MetadataThreadSortIndex{
-				EventCore: base,
+				EventCore: decodeEventCore(j.jsonEventCore),
 				SortIndex: sortIndex,
 			}
 		default:
 			event = &events.MetadataMisc{
-				EventWithArgs: withArgs(base, e),
+				EventWithArgs: events.EventWithArgs{
+					EventCore: decodeEventCore(j.jsonEventCore),
+					Args:      j.Args,
+				},
 			}
 		}
 
+	case events.PhaseGlobalMemoryDump:
+		var j jsonMemoryDumpEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode global memory dump event: %w", err)
+		}
+		event = &events.GlobalMemoryDump{
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
+		}
+	case events.PhaseProcessMemoryDump:
+		var j jsonMemoryDumpEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode process memory dump event: %w", err)
+		}
+		event = &events.ProcessMemoryDump{
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
+		}
+
 	case events.PhaseMark:
+		var j jsonMarkEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode mark event: %w", err)
+		}
 		event = &events.Mark{
-			EventWithArgs: withArgs(base, e),
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
+		}
+
+	case events.PhaseClockSync:
+		var j jsonClockSyncEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode clock sync event: %w", err)
+		}
+		issueTs, err := getIntEntry(j.Args, "issue_ts")
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract issue timestamp: %w", err)
+		}
+		syncId, err := requireStrEntry(j.Args, "sync_id")
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract sync ID: %w", err)
+		}
+		event = &events.ClockSync{
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
+			IssueTs: issueTs,
+			SyncId:  syncId,
 		}
 
 	case events.PhaseContextEnter:
+		var j jsonContextEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode context enter event: %w", err)
+		}
 		event = &events.ContextEnter{
-			EventWithArgs: withArgs(base, e),
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
+		}
+	case events.PhaseContextExit:
+		var j jsonContextEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode context exit event: %w", err)
+		}
+		event = &events.ContextExit{
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
 		}
 
-	case events.PhaseContextExit:
-		event = &events.ContextExit{
-			EventWithArgs: withArgs(base, e),
+	case events.PhaseLinkIds:
+		var j jsonLinkedIdEvent
+		if err := json.Unmarshal(rawEvent, &j); err != nil {
+			return nil, fmt.Errorf("unable to decode linked id event: %w", err)
+		}
+		linkedId, err := requireStrEntry(j.Args, "linked_id")
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract linked ID: %w", err)
+		}
+		event = &events.LinkIds{
+			EventWithArgs: events.EventWithArgs{
+				EventCore: decodeEventCore(j.jsonEventCore),
+				Args:      j.Args,
+			},
+			LinkedId: linkedId,
 		}
 
 	default:
-		return nil, fmt.Errorf("unknown phase encountered: '%v'", e.Phase)
+		return nil, fmt.Errorf("unknown phase encountered: '%v'", phase)
 	}
 
 	return event, nil
 }
 
-func withArgs(base events.EventCore, e jsonEvent) events.EventWithArgs {
-	return events.EventWithArgs{
-		EventCore: base,
-		Args:      e.Args,
+func requireIntEntry(args map[string]interface{}, key string) (int64, error) {
+	v, err := getIntEntry(args, key)
+	if err != nil {
+		return 0, err
 	}
-}
-
-func expectInt(v interface{}) (int64, error) {
-	if s, ok := v.(float64); ok {
-		return int64(s), nil
+	if v == nil {
+		return 0, fmt.Errorf("integer '%s' expected but was not found", key)
 	}
-	return 0, fmt.Errorf("expected number, got '%v': %w", v, ErrInvalidDataType)
+	return *v, nil
 }
 
-func expectStr(v interface{}) (string, error) {
-	if s, ok := v.(string); ok {
-		return s, nil
-	}
-	return "", fmt.Errorf("expected string, got '%v': %w", v, ErrInvalidDataType)
-}
-
-type postProcessStep interface {
-	Process(data *TefData) error
-}
-
-type buildStackTrace struct {
-	reference interface{}
-	target    *events.StackTrace
-}
-
-func (s buildStackTrace) Process(data *TefData) error {
-	var stackRef string
-	switch r := s.reference.(type) {
-	case string:
-		stackRef = r
-	case int:
-		stackRef = strconv.Itoa(r)
-	default:
-		return fmt.Errorf("invalid stack ref: %w", ErrInvalidStackId)
-	}
-
-	for {
-		frame, ok := data.stackFrames[stackRef]
-		if !ok {
-			return fmt.Errorf("invalid stack ref '%s': %w", stackRef, ErrStackIdNotFound)
-		}
-
-		s.target.Trace = append([]*events.StackFrame{frame}, s.target.Trace...)
-		if frame.Parent == "" {
-			break
-		}
-
-		stackRef = frame.Parent
-	}
-
-	return nil
-}
-
-func parseRawStackTrace(event jsonEvent, key string) (*events.StackTrace, error) {
-	stack, ok := event.Extra[key]
+func getIntEntry(args map[string]interface{}, key string) (*int64, error) {
+	v, ok := args[key]
 	if !ok {
 		return nil, nil
 	}
 
-	stackEntries, ok := stack.([]interface{})
-	if !ok {
-		return nil, ErrRawStackNotStrArray
+	if f, ok := v.(float64); ok {
+		i := int64(f)
+		return &i, nil
 	}
 
-	trace := &events.StackTrace{}
-	for _, entry := range stackEntries {
-		entryStr, ok := entry.(string)
-		if !ok {
-			return nil, ErrRawStackNotStrArray
-		}
-		trace.Trace = append(trace.Trace, &events.StackFrame{
-			Name: entryStr,
+	return nil, fmt.Errorf("expected number, got '%v': %w", v, ErrInvalidDataType)
+}
+
+func requireStrEntry(args map[string]interface{}, key string) (string, error) {
+	v, err := getStrEntry(args, key)
+	if err != nil {
+		return "", err
+	}
+	if v == nil {
+		return "", fmt.Errorf("string '%s' expected but was not found", key)
+	}
+	return *v, nil
+}
+
+func getStrEntry(args map[string]interface{}, key string) (*string, error) {
+	v, ok := args[key]
+	if !ok {
+		return nil, nil
+	}
+
+	if s, ok := v.(string); ok {
+		return &s, nil
+	}
+
+	return nil, fmt.Errorf("expected string, got '%v': %w", v, ErrInvalidDataType)
+}
+
+func decodeRawStackTrace(trace []string) *events.StackTrace {
+	if len(trace) < 1 {
+		return nil
+	}
+
+	t := events.StackTrace{}
+	for _, entry := range trace {
+		t.Trace = append(t.Trace, &events.StackFrame{
+			Name: entry,
 		})
 	}
+	return &t
+}
 
-	return trace, nil
+func decodeEventPhase(j json.RawMessage) (events.Phase, error) {
+	var jsonPhase jsonEventPhase
+	err := json.Unmarshal(j, &jsonPhase)
+	if err != nil {
+		return "", fmt.Errorf("unable to decode phase from JSON event: %w", err)
+	}
+	return events.Phase(jsonPhase.Phase), nil
+}
+
+func decodeEventCore(jsonCore jsonEventCore) events.EventCore {
+	categories := make([]string, 0)
+	if jsonCore.Categories != "" {
+		categories = strings.Split(jsonCore.Categories, ",")
+	}
+
+	core := events.EventCore{
+		Name:            jsonCore.Name,
+		Categories:      categories,
+		Timestamp:       jsonCore.Timestamp,
+		ThreadTimestamp: jsonCore.ThreadTimestamp,
+		ProcessID:       jsonCore.ProcessID,
+		ThreadID:        jsonCore.ThreadID,
+	}
+
+	return core
 }

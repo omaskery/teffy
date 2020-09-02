@@ -42,6 +42,13 @@ func (td *TefData) SetControllerTraceDataKey(s string) {
 	td.controllerTraceDataKey = s
 }
 
+func (td *TefData) SetStackFrame(id string, frame *events.StackFrame) {
+	if td.stackFrames == nil {
+		td.stackFrames = map[string]*events.StackFrame{}
+	}
+	td.stackFrames[id] = frame
+}
+
 func (td TefData) Events() []events.Event {
 	return td.traceEvents
 }
@@ -140,7 +147,7 @@ type jsonId2 struct {
 
 type jsonId struct {
 	Id  string  `json:"id,omitempty"`
-	Id2 jsonId2 `json:"id2,omitempty"`
+	Id2 *jsonId2 `json:"id2,omitempty"`
 }
 
 type jsonScopedId struct {

@@ -170,45 +170,45 @@ func writeJsonEvent(event events.Event) (interface{}, error) {
 	case *events.MetadataProcessName:
 		return jsonMetadataEvent{
 			jsonEventWithArgs: jsonEventWithArgs{
-				jsonEventCore: writeJsonEventCore(event),
+				jsonEventCore: writeJsonEventCoreWithName(event, string(events.MetadataKindProcessName)),
 				Args: map[string]interface{}{
-					string(events.MetadataKindProcessName): e.ProcessName,
+					"name": e.ProcessName,
 				},
 			},
 		}, nil
 	case *events.MetadataProcessLabels:
 		return jsonMetadataEvent{
 			jsonEventWithArgs: jsonEventWithArgs{
-				jsonEventCore: writeJsonEventCore(event),
+				jsonEventCore: writeJsonEventCoreWithName(event, string(events.MetadataKindProcessLabels)),
 				Args: map[string]interface{}{
-					string(events.MetadataKindProcessLabels): e.Labels,
+					"labels": e.Labels,
 				},
 			},
 		}, nil
 	case *events.MetadataProcessSortIndex:
 		return jsonMetadataEvent{
 			jsonEventWithArgs: jsonEventWithArgs{
-				jsonEventCore: writeJsonEventCore(event),
+				jsonEventCore: writeJsonEventCoreWithName(event, string(events.MetadataKindProcessSortIndex)),
 				Args: map[string]interface{}{
-					string(events.MetadataKindProcessSortIndex): e.SortIndex,
+					"sort_index": e.SortIndex,
 				},
 			},
 		}, nil
 	case *events.MetadataThreadName:
 		return jsonMetadataEvent{
 			jsonEventWithArgs: jsonEventWithArgs{
-				jsonEventCore: writeJsonEventCore(event),
+				jsonEventCore: writeJsonEventCoreWithName(event, string(events.MetadataKindThreadName)),
 				Args: map[string]interface{}{
-					string(events.MetadataKindProcessName): e.ThreadName,
+					"name": e.ThreadName,
 				},
 			},
 		}, nil
 	case *events.MetadataThreadSortIndex:
 		return jsonMetadataEvent{
 			jsonEventWithArgs: jsonEventWithArgs{
-				jsonEventCore: writeJsonEventCore(event),
+				jsonEventCore: writeJsonEventCoreWithName(event, string(events.MetadataKindThreadSortIndex)),
 				Args: map[string]interface{}{
-					string(events.MetadataKindThreadSortIndex): e.SortIndex,
+					"sort_index": e.SortIndex,
 				},
 			},
 		}, nil
@@ -320,6 +320,12 @@ func writeStackInfo(trace *events.StackTrace) jsonStackInfo {
 	return jsonStackInfo{
 		Stack: stack,
 	}
+}
+
+func writeJsonEventCoreWithName(e events.Event, name string) jsonEventCore {
+	core := writeJsonEventCore(e)
+	core.Name = name
+	return core
 }
 
 func writeJsonEventCore(e events.Event) jsonEventCore {

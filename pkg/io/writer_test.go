@@ -135,10 +135,12 @@ var _ = Describe("WriteJsonObject", func() {
 							"cute": "kittens",
 						},
 					},
-					StackTrace: &events.StackTrace{
-						Trace: []*events.StackFrame{
-							{
-								Name: "some stack frame",
+					EventStackTrace: events.EventStackTrace{
+						StackTrace: &events.StackTrace{
+							Trace: []*events.StackFrame{
+								{
+									Name: "some stack frame",
+								},
 							},
 						},
 					},

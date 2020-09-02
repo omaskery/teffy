@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+type EventWriter interface {
+	Write(e events.Event) error
+	io.Closer
+}
+
 func WriteJsonObject(w io.Writer, data TefData) error {
 	jsonFile := jsonObjectFile{
 		TraceEvents:            make([]json.RawMessage, 0, len(data.Events())),
@@ -28,14 +33,9 @@ func WriteJsonObject(w io.Writer, data TefData) error {
 	}
 
 	for _, event := range data.Events() {
-		jsonEvent, err := writeJsonEvent(event)
+		msg, err := marshalJsonEvent(event)
 		if err != nil {
-			return fmt.Errorf("failed while preparing json event: %w", err)
-		}
-
-		msg, err := json.Marshal(jsonEvent)
-		if err != nil {
-			return fmt.Errorf("failed to serialise json event: %w", err)
+			return fmt.Errorf("failed to marshal json event: %w", err)
 		}
 
 		jsonFile.TraceEvents = append(jsonFile.TraceEvents, msg)
@@ -48,6 +48,103 @@ func WriteJsonObject(w io.Writer, data TefData) error {
 	}
 
 	return nil
+}
+
+func WriteJsonArray(w io.Writer, events []events.Event) error {
+	jsonEvents := make([]json.RawMessage, 0, len(events))
+
+	for _, e := range events {
+		msg, err := marshalJsonEvent(e)
+		if err != nil {
+			return fmt.Errorf("failed to marshal json event: %w", err)
+		}
+
+		jsonEvents = append(jsonEvents, msg)
+	}
+
+	encoder := json.NewEncoder(w)
+	if err := encoder.Encode(jsonEvents); err != nil {
+		return fmt.Errorf("failed to write JSON array file: %w", err)
+	}
+
+	return nil
+}
+
+type streamingWriter struct {
+	w           io.WriteCloser
+	initialised bool
+	finalised   bool
+}
+
+func NewStreamingWriter(w io.WriteCloser) EventWriter {
+	return &streamingWriter{
+		w: w,
+	}
+}
+
+func (sw *streamingWriter) initialise() error {
+	if _, err := io.WriteString(sw.w, "["); err != nil {
+		return fmt.Errorf("error writing initial array start: %w", err)
+	}
+	sw.initialised = true
+	return nil
+}
+
+func (sw *streamingWriter) Write(e events.Event) error {
+	if !sw.initialised {
+		if err := sw.initialise(); err != nil {
+			return err
+		}
+	} else {
+		if _, err := io.WriteString(sw.w, ","); err != nil {
+			return fmt.Errorf("error writing comma after previous event: %w", err)
+		}
+	}
+
+	msg, err := marshalJsonEvent(e)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json event: %w", err)
+	}
+
+	if _, err = sw.w.Write(msg); err != nil {
+		return fmt.Errorf("failed to write json event: %w", err)
+	}
+
+	return nil
+}
+
+func (sw *streamingWriter) Close() error {
+	if sw.finalised {
+		return nil
+	}
+
+	if !sw.initialised {
+		if err := sw.initialise(); err != nil {
+			return err
+		}
+	}
+
+	if _, err := io.WriteString(sw.w, "]"); err != nil {
+		return fmt.Errorf("failed to write final array end: %w", err)
+	}
+
+	if err := sw.w.Close(); err != nil {
+		return fmt.Errorf("failed to close underlying writer: %w", err)
+	}
+
+	return nil
+}
+
+func marshalJsonEvent(event events.Event) (json.RawMessage, error) {
+	jsonEvent, err := writeJsonEvent(event)
+	if err != nil {
+		return nil, fmt.Errorf("failed while preparing json event: %w", err)
+	}
+	msg, err := json.Marshal(jsonEvent)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialise json event: %w", err)
+	}
+	return msg, nil
 }
 
 func writeJsonEvent(event events.Event) (interface{}, error) {

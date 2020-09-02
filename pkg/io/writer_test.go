@@ -6,39 +6,40 @@ import (
 	"github.com/omaskery/teffy/pkg/events"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"io"
 	"strings"
 
-	"github.com/omaskery/teffy/pkg/io"
+	teffyio "github.com/omaskery/teffy/pkg/io"
 )
 
 var _ = Describe("WriteJsonObject", func() {
 	var writer strings.Builder
-	var data io.TefData
+	var data teffyio.TefData
 	var err error
 	var output string
 
 	BeforeEach(func() {
 		writer = strings.Builder{}
-		data = io.TefData{}
+		data = teffyio.TefData{}
 		output = ""
 		err = nil
 	})
 
 	JustBeforeEach(func() {
-		err = io.WriteJsonObject(&writer, data)
+		err = teffyio.WriteJsonObject(&writer, data)
 		output = writer.String()
 	})
 
 	When("using empty trace data", func() {
 		It("generates valid output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson()))
+			Expect(output).To(MatchJSON(testJsonObjFile()))
 		})
 	})
 
 	When("defaults are overriden", func() {
 		BeforeEach(func() {
-			data.SetDisplayTimeUnit(io.DisplayTimeNs)
+			data.SetDisplayTimeUnit(teffyio.DisplayTimeNs)
 			data.SetSystemTraceEvents("hello")
 			data.SetPowerTraceString("bye")
 			data.SetControllerTraceDataKey("wow-key")
@@ -105,7 +106,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 			It("generates expected output", func() {
 				Expect(err).To(Succeed())
-				Expect(output).To(MatchJSON(testJson(
+				Expect(output).To(MatchJSON(testJsonObjFile(
 					mustJson(map[string]interface{}{
 						"name": "wow-an-event",
 						"ph":   "B",
@@ -174,7 +175,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseBeginDuration, minimalArgs(), nil),
 			)))
 		})
@@ -189,7 +190,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseEndDuration, minimalArgs(), nil),
 			)))
 		})
@@ -204,7 +205,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseComplete, minimalArgs(), nil),
 			)))
 		})
@@ -220,7 +221,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 			It("generates expected output", func() {
 				Expect(err).To(Succeed())
-				Expect(output).To(MatchJSON(testJson(
+				Expect(output).To(MatchJSON(testJsonObjFile(
 					eventJson(events.PhaseInstant, nil, nil),
 				)))
 			})
@@ -236,7 +237,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 			It("generates expected output", func() {
 				Expect(err).To(Succeed())
-				Expect(output).To(MatchJSON(testJson(
+				Expect(output).To(MatchJSON(testJsonObjFile(
 					eventJson(events.PhaseInstant, nil, map[string]interface{}{
 						"s": string(events.InstantScopeProcess),
 					}),
@@ -258,7 +259,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseCounter, map[string]interface{}{
 					"hello": 24,
 					"meow":  10,
@@ -278,7 +279,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseAsyncBegin, minimalArgs(), minimalId(true)),
 			)))
 		})
@@ -295,7 +296,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseAsyncInstant, minimalArgs(), minimalId(true)),
 			)))
 		})
@@ -312,7 +313,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseAsyncEnd, minimalArgs(), minimalId(true)),
 			)))
 		})
@@ -328,7 +329,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseObjectCreated, nil, minimalId(false)),
 			)))
 		})
@@ -344,7 +345,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseObjectSnapshot, minimalArgs(), minimalId(false)),
 			)))
 		})
@@ -360,7 +361,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseObjectDeleted, nil, minimalId(false)),
 			)))
 		})
@@ -376,7 +377,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseMetadata, map[string]interface{}{
 					"name": "some-process-name",
 				}, withEventName(string(events.MetadataKindProcessName))),
@@ -394,7 +395,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseMetadata, map[string]interface{}{
 					"labels": "some-label",
 				}, withEventName(string(events.MetadataKindProcessLabels))),
@@ -412,7 +413,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseMetadata, map[string]interface{}{
 					"sort_index": 3,
 				}, withEventName(string(events.MetadataKindProcessSortIndex))),
@@ -430,7 +431,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseMetadata, map[string]interface{}{
 					"name": "some-thread-name",
 				}, withEventName(string(events.MetadataKindThreadName))),
@@ -448,7 +449,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseMetadata, map[string]interface{}{
 					"sort_index": 3,
 				}, withEventName(string(events.MetadataKindThreadSortIndex))),
@@ -465,7 +466,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseMetadata, minimalArgs(), nil),
 			)))
 		})
@@ -480,7 +481,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseGlobalMemoryDump, minimalArgs(), nil),
 			)))
 		})
@@ -495,7 +496,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseProcessMemoryDump, minimalArgs(), nil),
 			)))
 		})
@@ -510,7 +511,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseMark, minimalArgs(), nil),
 			)))
 		})
@@ -528,7 +529,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseClockSync, map[string]interface{}{
 					"cute":     "kittens",
 					"sync_id":  "hello",
@@ -548,7 +549,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseContextEnter, minimalArgs(), minimalId(false)),
 			)))
 		})
@@ -564,7 +565,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseContextExit, minimalArgs(), minimalId(false)),
 			)))
 		})
@@ -581,7 +582,7 @@ var _ = Describe("WriteJsonObject", func() {
 
 		It("generates expected output", func() {
 			Expect(err).To(Succeed())
-			Expect(output).To(MatchJSON(testJson(
+			Expect(output).To(MatchJSON(testJsonObjFile(
 				eventJson(events.PhaseLinkIds, map[string]interface{}{
 					"cute":      "kittens",
 					"linked_id": "some-other-id",
@@ -591,12 +592,170 @@ var _ = Describe("WriteJsonObject", func() {
 	})
 })
 
-func testJson(events ...string) string {
+var _ = Describe("WriteJsonArray", func() {
+	var writer strings.Builder
+	var data []events.Event
+	var err error
+	var output string
+
+	BeforeEach(func() {
+		writer = strings.Builder{}
+		data = make([]events.Event, 0)
+		output = ""
+		err = nil
+	})
+
+	JustBeforeEach(func() {
+		err = teffyio.WriteJsonArray(&writer, data)
+		output = writer.String()
+	})
+
+	When("writing an empty array", func() {
+		It("produces expected output", func() {
+			Expect(err).To(Succeed())
+			Expect(output).To(MatchJSON("[]"))
+		})
+	})
+
+	When("writing a single event", func() {
+		BeforeEach(func() {
+			data = append(data, &events.BeginDuration{
+				EventWithArgs: minimalEventWithArgs(minimalArgs()),
+			})
+		})
+
+		It("produces expected output", func() {
+			Expect(err).To(Succeed())
+			Expect(output).To(MatchJSON(testJsonArrFile(
+				eventJson(events.PhaseBeginDuration, minimalArgs(), nil),
+			)))
+		})
+	})
+})
+
+var _ = Describe("StreamingWriter", func() {
+	var writer strings.Builder
+	var stream teffyio.EventWriter
+	var output string
+
+	BeforeEach(func() {
+		writer = strings.Builder{}
+		stream = teffyio.NewStreamingWriter(writerNoopCloser(&writer))
+		output = ""
+	})
+
+	Context("when the stream is not closed properly", func() {
+		JustBeforeEach(func() {
+			output = writer.String()
+		})
+
+		When("writing no entries", func() {
+			It("produces no output", func() {
+				Expect(output).To(Equal(""))
+			})
+		})
+
+		When("writing one entry", func() {
+			BeforeEach(func() {
+				Expect(stream.Write(&events.BeginDuration{
+					EventWithArgs: minimalEventWithArgs(minimalArgs()),
+				})).To(Succeed())
+			})
+
+			It("produces the valid start of an array", func() {
+				Expect(output + "]").To(MatchJSON(testJsonArrFile(
+					eventJson(events.PhaseBeginDuration, minimalArgs(), nil),
+				)))
+			})
+		})
+
+		When("writing two events", func() {
+			BeforeEach(func() {
+				Expect(stream.Write(&events.BeginDuration{
+					EventWithArgs: minimalEventWithArgs(minimalArgs()),
+				})).To(Succeed())
+				Expect(stream.Write(&events.EndDuration{
+					EventWithArgs: minimalEventWithArgs(minimalArgs()),
+				})).To(Succeed())
+			})
+
+			It("produces the valid start of an array", func() {
+				Expect(output + "]").To(MatchJSON(testJsonArrFile(
+					eventJson(events.PhaseBeginDuration, minimalArgs(), nil),
+					eventJson(events.PhaseEndDuration, minimalArgs(), nil),
+				)))
+			})
+		})
+	})
+
+	Context("when the stream is closed on completion", func() {
+		JustBeforeEach(func() {
+			Expect(stream.Close()).To(Succeed())
+			output = writer.String()
+		})
+
+		When("writing no entries", func() {
+			It("produces empty array output", func() {
+				Expect(output).To(MatchJSON("[]"))
+			})
+		})
+
+		When("writing a single event", func() {
+			BeforeEach(func() {
+				Expect(stream.Write(&events.BeginDuration{
+					EventWithArgs: minimalEventWithArgs(minimalArgs()),
+				})).To(Succeed())
+			})
+
+			It("produces array with single expected element", func() {
+				Expect(output).To(MatchJSON(testJsonArrFile(
+					eventJson(events.PhaseBeginDuration, minimalArgs(), nil),
+				)))
+			})
+		})
+
+		When("writing two events", func() {
+			BeforeEach(func() {
+				Expect(stream.Write(&events.BeginDuration{
+					EventWithArgs: minimalEventWithArgs(minimalArgs()),
+				})).To(Succeed())
+				Expect(stream.Write(&events.EndDuration{
+					EventWithArgs: minimalEventWithArgs(minimalArgs()),
+				})).To(Succeed())
+			})
+
+			It("produces array with two expected elements", func() {
+				Expect(output).To(MatchJSON(testJsonArrFile(
+					eventJson(events.PhaseBeginDuration, minimalArgs(), nil),
+					eventJson(events.PhaseEndDuration, minimalArgs(), nil),
+				)))
+			})
+		})
+	})
+})
+
+type wrapper struct {
+	io.Writer
+}
+
+func (w *wrapper) Close() error {
+	return nil
+}
+
+func writerNoopCloser(w io.Writer) io.WriteCloser {
+	return &wrapper{w}
+}
+
+func testJsonObjFile(events ...string) string {
 	return fmt.Sprintf(`{
 		"traceEvents": [
 			%s
 		]
 	}`, strings.Join(events, ","))
+}
+
+func testJsonArrFile(events ...string) string {
+	return fmt.Sprintf("[%s]", strings.Join(events, ","))
 }
 
 func mustJson(j map[string]interface{}) string {

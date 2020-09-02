@@ -124,7 +124,9 @@ func parseJsonEvent(rawEvent json.RawMessage) (events.Event, error) {
 				EventCore: decodeEventCore(j.jsonEventCore),
 				Args:      j.Args,
 			},
-			StackTrace: decodeRawStackTrace(j.Stack),
+			EventStackTrace: events.EventStackTrace{
+				StackTrace: decodeRawStackTrace(j.Stack),
+			},
 		}
 	case events.PhaseEndDuration:
 		var j jsonDurationEvent
@@ -136,7 +138,9 @@ func parseJsonEvent(rawEvent json.RawMessage) (events.Event, error) {
 				EventCore: decodeEventCore(j.jsonEventCore),
 				Args:      j.Args,
 			},
-			StackTrace: decodeRawStackTrace(j.Stack),
+			EventStackTrace: events.EventStackTrace{
+				StackTrace: decodeRawStackTrace(j.Stack),
+			},
 		}
 
 	case events.PhaseComplete:
@@ -149,8 +153,12 @@ func parseJsonEvent(rawEvent json.RawMessage) (events.Event, error) {
 				EventCore: decodeEventCore(j.jsonEventCore),
 				Args:      j.Args,
 			},
-			StackTrace:    decodeRawStackTrace(j.Stack),
-			EndStackTrace: decodeRawStackTrace(j.EndStack),
+			EventStackTrace: events.EventStackTrace{
+				StackTrace:    decodeRawStackTrace(j.Stack),
+			},
+			EventEndStackTrace: events.EventEndStackTrace{
+				EndStackTrace: decodeRawStackTrace(j.EndStack),
+			},
 		}
 
 	case events.PhaseInstant:
@@ -164,8 +172,10 @@ func parseJsonEvent(rawEvent json.RawMessage) (events.Event, error) {
 		}
 		event = &events.Instant{
 			EventCore:  decodeEventCore(j.jsonEventCore),
+			EventStackTrace: events.EventStackTrace{
+				StackTrace: decodeRawStackTrace(j.Stack),
+			},
 			Scope:      scope,
-			StackTrace: decodeRawStackTrace(j.Stack),
 		}
 
 	case events.PhaseCounter:

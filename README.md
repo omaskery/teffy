@@ -9,6 +9,11 @@ Teffy is a library for reading & writing Google Chrome [Trace Event Format](http
 
 `go get github.com/omaskery/teffy`
 
+The package is split into three main parts:
+ * `events` - the logical representation of trace events
+ * `io` - the ability to read/write events to files (including streaming)
+ * `utils/trace` - opinionated utilities for generating traces
+
 ## Reading Events
 
 ```go
@@ -18,14 +23,14 @@ import (
     "fmt"
     "os"
     
-    teffyio "github.com/omaskery/teffy/pkg/io"
+    tio "github.com/omaskery/teffy/pkg/io"
 )
 
 func main() {
     f, _ := os.Open("some.trace")
     defer f.Close()
 
-    trace, _ := teffyio.ParseJsonObj(f)
+    trace, _ := tio.ParseJsonObj(f)
 
     for _, event := range trace.Events() {
         fmt.Printf("- %v\n", event)
@@ -42,25 +47,27 @@ import (
     "os"
     
     "github.com/omaskery/teffy/pkg/events"
-    teffyio "github.com/omaskery/teffy/pkg/io"
+    tio "github.com/omaskery/teffy/pkg/io"
 )
 
 func main() {
     f, _ := os.OpenFile("some.trace", os.O_RDWR, os.ModePerm)
     defer f.Close()
 
-    writer := teffyio.JsonArrayWriter(f)
-    writer.Write(&events.BeginDuration{
+    data := tio.TefData{}
+    data.Write(&events.BeginDuration{
         Name: "my event",
         Categories: []string{ "cool", "categories" },
         Timestamp: 0,
     })
     // your amazing code
-    writer.Write(&events.EndDuration{
+    data.Write(&events.EndDuration{
         Name: "my event",
         Categories: []string{ "cool", "categories" },
         Timestamp: 100,
     })
+
+    _ = tio.WriteJsonObject(f, data)
 }
 ```
 
@@ -70,15 +77,17 @@ func main() {
 package main
 
 import (
-    "github.com/omaskery/teffy/pkg/util"
+    "github.com/omaskery/teffy/pkg/util/trace"
 )
 
 func main() {
-    t, _ := util.StartTrace("some.trace")
+    t, _ := trace.TraceToFile("some.trace")
     defer t.Close()
     
-    duration := t.BeginDuration("my event", util.WithCategories("cool", "categories"))
-    defer duration.Close()
+    duration := t.BeginDuration("my event", trace.WithCategories("cool", "categories"))
+    defer duration.End()
+
     // your amazing code
+    t.Instant("wow a thing happened!", trace.WithStackTrace())
 }
 ```

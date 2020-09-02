@@ -51,6 +51,18 @@ type EventCore struct {
 	ThreadID        *int64
 }
 
+type ArgSetter interface {
+	SetArgs(args map[string]interface{})
+}
+
+type StackTraceSetter interface {
+	SetStackTrace(trace *StackTrace)
+}
+
+type EndStackTraceSetter interface {
+	SetEndStackTrace(trace *StackTrace)
+}
+
 func (ec *EventCore) Core() *EventCore {
 	return ec
 }
@@ -60,24 +72,40 @@ type EventWithArgs struct {
 	Args map[string]interface{}
 }
 
+func (e *EventWithArgs) SetArgs(args map[string]interface{}) {
+	e.Args = args
+}
+
+type EventStackTrace struct {
+	StackTrace *StackTrace
+}
+
+func (e *EventStackTrace) SetStackTrace(trace *StackTrace) {
+	e.StackTrace = trace
+}
+
+type EventEndStackTrace struct {
+	EndStackTrace *StackTrace
+}
+
 type BeginDuration struct {
 	EventWithArgs
-	StackTrace *StackTrace
+	EventStackTrace
 }
 
 func (BeginDuration) Phase() Phase { return PhaseBeginDuration }
 
 type EndDuration struct {
 	EventWithArgs
-	StackTrace *StackTrace
+	EventStackTrace
 }
 
 func (EndDuration) Phase() Phase { return PhaseEndDuration }
 
 type Complete struct {
 	EventWithArgs
-	StackTrace    *StackTrace
-	EndStackTrace *StackTrace
+	EventStackTrace
+	EventEndStackTrace
 }
 
 func (Complete) Phase() Phase { return PhaseComplete }
@@ -92,8 +120,8 @@ const (
 
 type Instant struct {
 	EventCore
-	Scope      InstantScope
-	StackTrace *StackTrace
+	EventStackTrace
+	Scope InstantScope
 }
 
 func (Instant) Phase() Phase { return PhaseInstant }

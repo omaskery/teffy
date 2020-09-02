@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/omaskery/teffy/pkg/io"
 	"os"
+
+	"github.com/omaskery/teffy/pkg/io"
 )
 
 func main() {

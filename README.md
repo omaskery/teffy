@@ -85,8 +85,7 @@ func main() {
     t, _ := trace.TraceToFile("some.trace")
     defer t.Close()
     
-    duration := t.BeginDuration("my event", trace.WithCategories("cool", "categories"))
-    defer duration.End()
+    defer t.BeginDuration("my event", trace.WithCategories("cool", "categories")).End()
 
     // your amazing code
     t.Instant("wow a thing happened!", trace.WithStackTrace())

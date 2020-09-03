@@ -1,3 +1,4 @@
+// events provides logical representations for trace events
 package events
 
 // Phase is the discriminator for identifying the type of an event in a Trace Event Format file

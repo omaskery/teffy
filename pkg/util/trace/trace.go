@@ -1,3 +1,4 @@
+// trace provides opinionated utilities for generating traces
 package trace
 
 import (

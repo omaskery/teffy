@@ -5,6 +5,7 @@ import (
 	"github.com/omaskery/teffy/pkg/events"
 )
 
+// DisplayTimeUnit indicates whether time should be displayed in nano or milliseconds
 type DisplayTimeUnit string
 
 const (
@@ -12,6 +13,7 @@ const (
 	DisplayTimeMs DisplayTimeUnit = "ms"
 )
 
+// TefData is an in-memory representation of a JSON Object Format variant of Trace Event Format file
 type TefData struct {
 	traceEvents            []events.Event
 	displayTimeUnit        DisplayTimeUnit
@@ -22,26 +24,32 @@ type TefData struct {
 	metadata               map[string]interface{}
 }
 
+// Write records the given trace event
 func (td *TefData) Write(e events.Event) {
 	td.traceEvents = append(td.traceEvents, e)
 }
 
+// SetDisplayTimeUnit sets what units timestamps should be displayed in
 func (td *TefData) SetDisplayTimeUnit(d DisplayTimeUnit) {
 	td.displayTimeUnit = d
 }
 
+// SetSystemTraceEvents stores the provided system trace text
 func (td *TefData) SetSystemTraceEvents(s string) {
 	td.systemTraceEvents = s
 }
 
+// SetSystemTraceString stores the provided power trace string
 func (td *TefData) SetPowerTraceString(s string) {
 	td.powerTraceAsString = s
 }
 
+// SetControllerTraceDataKey records which key this tracing agent stores traces in
 func (td *TefData) SetControllerTraceDataKey(s string) {
 	td.controllerTraceDataKey = s
 }
 
+// SetStackFrame internally associates the given stack frame with the given id
 func (td *TefData) SetStackFrame(id string, frame *events.StackFrame) {
 	if td.stackFrames == nil {
 		td.stackFrames = map[string]*events.StackFrame{}
@@ -49,30 +57,37 @@ func (td *TefData) SetStackFrame(id string, frame *events.StackFrame) {
 	td.stackFrames[id] = frame
 }
 
+// Events retrieves the events stored in the file
 func (td TefData) Events() []events.Event {
 	return td.traceEvents
 }
 
+// DisplayTimeUnit gets the desired units to display timestamps from this file
 func (td TefData) DisplayTimeUnit() DisplayTimeUnit {
 	return td.displayTimeUnit
 }
 
+// SystemTraceEvents retrieves the system trace string
 func (td TefData) SystemTraceEvents() string {
 	return td.systemTraceEvents
 }
 
+// PowerTraceAsString retrieves the power trace string
 func (td TefData) PowerTraceAsString() string {
 	return td.powerTraceAsString
 }
 
+// StackFrames retrieves the stack frames recorded in this file
 func (td TefData) StackFrames() map[string]*events.StackFrame {
 	return td.stackFrames
 }
 
+// ControllerTraceDataKey retrieves the key that trace events are stored under for this trace file
 func (td TefData) ControllerTraceDataKey() string {
 	return td.controllerTraceDataKey
 }
 
+// Metadata retrieves additional, non standard key values stored at the top level of this file
 func (td TefData) Metadata() map[string]interface{} {
 	return td.metadata
 }
@@ -146,7 +161,7 @@ type jsonId2 struct {
 }
 
 type jsonId struct {
-	Id  string  `json:"id,omitempty"`
+	Id  string   `json:"id,omitempty"`
 	Id2 *jsonId2 `json:"id2,omitempty"`
 }
 

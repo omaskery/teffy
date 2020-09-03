@@ -10,11 +10,15 @@ import (
 )
 
 var (
+	// ErrInvalidDisplayTimeUnit means the file being parsed requests being rendered as an unknown display time unit
 	ErrInvalidDisplayTimeUnit = errors.New("invalid display time unit")
-	ErrInvalidDataType        = errors.New("data found in file does not match expected type")
-	ErrSyntaxError            = errors.New("file format contained a syntax error")
+	// ErrInvalidDataType means that during parsing a value was of an unexpected type (e.g. getting a number instead of string)
+	ErrInvalidDataType = errors.New("data found in file does not match expected type")
+	// ErrSyntaxError means that the file being parsed contains invalid JSON
+	ErrSyntaxError = errors.New("file format contained a syntax error")
 )
 
+// ParseJsonArray reads a JSON Array Format variant of a Trace Event Format file from the provided reader
 func ParseJsonArray(r io.Reader) (*TefData, error) {
 	decoder := json.NewDecoder(r)
 
@@ -54,6 +58,7 @@ func ParseJsonArray(r io.Reader) (*TefData, error) {
 	return result, nil
 }
 
+// ParseJsonObj reads a JSON Object Format variant of a Trace Event Format file from the provided reader
 func ParseJsonObj(r io.Reader) (*TefData, error) {
 	var jsonFile jsonObjectFile
 	decoder := json.NewDecoder(r)
@@ -154,7 +159,7 @@ func parseJsonEvent(rawEvent json.RawMessage) (events.Event, error) {
 				Args:      j.Args,
 			},
 			EventStackTrace: events.EventStackTrace{
-				StackTrace:    decodeRawStackTrace(j.Stack),
+				StackTrace: decodeRawStackTrace(j.Stack),
 			},
 			EventEndStackTrace: events.EventEndStackTrace{
 				EndStackTrace: decodeRawStackTrace(j.EndStack),
@@ -171,11 +176,11 @@ func parseJsonEvent(rawEvent json.RawMessage) (events.Event, error) {
 			scope = events.InstantScopeGlobal
 		}
 		event = &events.Instant{
-			EventCore:  decodeEventCore(j.jsonEventCore),
+			EventCore: decodeEventCore(j.jsonEventCore),
 			EventStackTrace: events.EventStackTrace{
 				StackTrace: decodeRawStackTrace(j.Stack),
 			},
-			Scope:      scope,
+			Scope: scope,
 		}
 
 	case events.PhaseCounter:

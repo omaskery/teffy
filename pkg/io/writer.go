@@ -8,11 +8,14 @@ import (
 	"strings"
 )
 
+// EventWriter represents a destination for writing trace events
 type EventWriter interface {
+	// Write consumes the given tracing event, possibly recording it to disk, emitting it to a network, etc.
 	Write(e events.Event) error
 	io.Closer
 }
 
+// WriteJsonObject marshals the given data to the provided writer in the JSON Object Format form of Tracing Event Format
 func WriteJsonObject(w io.Writer, data TefData) error {
 	jsonFile := jsonObjectFile{
 		TraceEvents:            make([]json.RawMessage, 0, len(data.Events())),
@@ -50,6 +53,7 @@ func WriteJsonObject(w io.Writer, data TefData) error {
 	return nil
 }
 
+// WriteJsonArray marshals the given events to the provided writer in the JSON Array Format form of Tracing Event Format
 func WriteJsonArray(w io.Writer, events []events.Event) error {
 	jsonEvents := make([]json.RawMessage, 0, len(events))
 
@@ -76,6 +80,9 @@ type streamingWriter struct {
 	finalised   bool
 }
 
+// NewStreamingWriter creates a new event writer designed to write events out immediately,
+// particularly useful when streaming events out continuously to disk for analysing in the event of
+// a full crash of the tracing application. To achieve this the JSON Array Format is used.
 func NewStreamingWriter(w io.WriteCloser) EventWriter {
 	return &streamingWriter{
 		w: w,
@@ -90,6 +97,7 @@ func (sw *streamingWriter) initialise() error {
 	return nil
 }
 
+// Write emits the the provided event immediately to the backing io.Writer
 func (sw *streamingWriter) Write(e events.Event) error {
 	if !sw.initialised {
 		if err := sw.initialise(); err != nil {
@@ -113,6 +121,7 @@ func (sw *streamingWriter) Write(e events.Event) error {
 	return nil
 }
 
+// Close allows the streaming writer to close the underlying stream and ensure the output file is correctly formatted
 func (sw *streamingWriter) Close() error {
 	if sw.finalised {
 		return nil

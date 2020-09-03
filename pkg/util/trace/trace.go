@@ -69,7 +69,7 @@ func TracerToWriter(w io.WriteCloser, options ...TracerOption) *Tracer {
 
 // TraceToFile creates a new Tracer that writes events in JSON Array Format to a file specified by the given path
 func TraceToFile(path string, options ...TracerOption) (*Tracer, error) {
-	f, err := os.OpenFile(path, os.O_RDWR, os.ModePerm)
+	f, err := os.OpenFile(path, os.O_RDWR | os.O_CREATE, os.ModePerm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
@@ -193,7 +193,7 @@ func (t *Tracer) BeginDuration(name string, options ...EventOption) Duration {
 }
 
 // End generates an event signalling the end of some work on a thread
-func (d *Duration) End(options ...EventOption) {
+func (d Duration) End(options ...EventOption) {
 	event := &events.EndDuration{
 		EventWithArgs: events.EventWithArgs{
 			EventCore: events.EventCore{

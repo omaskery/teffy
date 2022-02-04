@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/omaskery/teffy/pkg/events"
 	"io"
 	"strings"
+
+	"github.com/omaskery/teffy/pkg/events"
 )
 
 var (
@@ -166,7 +167,7 @@ func parseJsonEvent(rawEvent json.RawMessage) (events.Event, error) {
 			},
 		}
 
-	case events.PhaseInstant:
+	case events.PhaseInstant, events.PhaseInstantLegacy:
 		var j jsonInstantEvent
 		if err := json.Unmarshal(rawEvent, &j); err != nil {
 			return nil, fmt.Errorf("unable to decode instant event: %w", err)

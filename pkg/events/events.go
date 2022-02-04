@@ -9,6 +9,7 @@ const (
 	PhaseEndDuration       Phase = "E"
 	PhaseComplete          Phase = "X"
 	PhaseInstant           Phase = "I"
+	PhaseInstantLegacy     Phase = "i"
 	PhaseCounter           Phase = "C"
 	PhaseAsyncBegin        Phase = "b"
 	PhaseAsyncEnd          Phase = "e"

@@ -2,6 +2,8 @@ package io
 
 import (
 	"encoding/json"
+	"strconv"
+
 	"github.com/omaskery/teffy/pkg/events"
 )
 
@@ -153,6 +155,47 @@ type jsonInstantEvent struct {
 type jsonCounterEvent struct {
 	jsonEventCore
 	Values map[string]float64 `json:"args,omitempty"`
+}
+
+type numberOrString struct {
+	number float64
+	str    string
+}
+
+func (nos *numberOrString) UnmarshalJSON(data []byte) error {
+	if err := json.Unmarshal(data, &nos.str); err != nil {
+		return json.Unmarshal(data, &nos.number)
+	}
+
+	return nil
+}
+
+type tempJsonCounterEvent struct {
+	jsonEventCore
+	Values map[string]numberOrString `json:"args,omitempty"`
+}
+
+func (ce *jsonCounterEvent) UnmarshalJSON(data []byte) error {
+	t := &tempJsonCounterEvent{}
+	if err := json.Unmarshal(data, t); err != nil {
+		return err
+	}
+	ce.jsonEventCore = t.jsonEventCore
+	ce.Values = make(map[string]float64)
+	for k, numberOrStr := range t.Values {
+		value := numberOrStr.number
+
+		if numberOrStr.str != "" {
+			f, err := strconv.ParseFloat(numberOrStr.str, 64)
+			if err != nil {
+				return err
+			}
+			value = f
+		}
+
+		ce.Values[k] = value
+	}
+	return nil
 }
 
 type jsonId2 struct {

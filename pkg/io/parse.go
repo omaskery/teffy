@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/omaskery/teffy/pkg/events"
@@ -484,6 +485,15 @@ func getIntEntry(args map[string]interface{}, key string) (*int64, error) {
 
 	if f, ok := v.(float64); ok {
 		i := int64(f)
+		return &i, nil
+	}
+
+	if s, ok := v.(string); ok {
+		i, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("could not parse %s to integer '%v'", s, err)
+		}
+
 		return &i, nil
 	}
 

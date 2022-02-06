@@ -3,9 +3,10 @@ package io
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/omaskery/teffy/pkg/events"
 	"io"
 	"strings"
+
+	"github.com/omaskery/teffy/pkg/events"
 )
 
 // EventWriter represents a destination for writing trace events
@@ -183,6 +184,7 @@ func writeJsonEvent(event events.Event) (interface{}, error) {
 			},
 			jsonStackInfo: writeStackInfo(e.StackTrace),
 			EndStack:      writeStackInfo(e.EndStackTrace).Stack,
+			Duration:      e.Duration,
 		}, nil
 
 	case *events.Instant:

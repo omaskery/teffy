@@ -142,6 +142,7 @@ type jsonDurationEvent struct {
 type jsonCompleteEvent struct {
 	jsonEventWithArgs
 	jsonStackInfo
+	Duration      int64    `json:"dur,omitempty"`
 	EndStack      []string `json:"estack,omitempty"`
 	EndStackFrame string   `json:"esf,omitempty"`
 }

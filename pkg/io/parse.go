@@ -165,6 +165,7 @@ func parseJsonEvent(rawEvent json.RawMessage) (events.Event, error) {
 			EventEndStackTrace: events.EventEndStackTrace{
 				EndStackTrace: decodeRawStackTrace(j.EndStack),
 			},
+			Duration: j.Duration,
 		}
 
 	case events.PhaseInstant, events.PhaseInstantLegacy:

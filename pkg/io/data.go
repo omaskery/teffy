@@ -107,7 +107,7 @@ type jsonObjectFile struct {
 	SystemTraceEvents      string                 `json:"systemTraceEvents,omitempty"`
 	PowerTraceAsString     string                 `json:"powerTraceAsString,omitempty"`
 	ControllerTraceDataKey string                 `json:"controllerTraceDataKey,omitempty"`
-	Metadata               map[string]interface{} `json:"-"`
+	Metadata               map[string]interface{} `json:"otherData,omitempty"`
 }
 
 type jsonEventPhase struct {

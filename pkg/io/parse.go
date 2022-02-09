@@ -71,7 +71,7 @@ func ParseJsonObj(r io.Reader) (*TefData, error) {
 
 	result := &TefData{
 		displayTimeUnit:        DisplayTimeMs,
-		metadata:               map[string]interface{}{},
+		metadata:               jsonFile.Metadata,
 		stackFrames:            map[string]*events.StackFrame{},
 		controllerTraceDataKey: "traceEvents",
 	}
